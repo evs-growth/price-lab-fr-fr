@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booksy Price Lab - Pro Simplifié</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap');
+        body { font-family: 'Poppins', sans-serif; background-color: #f8fafc; color: #2A2C32; }
+        .editable-input { 
+            background: white; 
+            border: 2px solid #E2E8F0; 
+            border-radius: 12px; 
+            padding: 8px 12px; 
+            transition: all 0.2s; 
+            font-weight: 600;
+        }
+        .editable-input:focus { border-color: #0BA3AD; outline: none; box-shadow: 0 0 0 3px rgba(11, 163, 173, 0.1); }
+        .tab-active { background-color: #0BA3AD; color: white; box-shadow: 0 10px 15px -3px rgba(11, 163, 173, 0.3); }
+        .animate-fade-up { animation: fadeUp 0.3s ease-out; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            min-height: 100vh;
+            background-color: rgba(42, 44, 50, 0.7);
+            backdrop-filter: blur(4px);
+            animation: fadeIn 0.2s ease-out;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #0BA3AD; border-radius: 10px; }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { main: '#0BA3AD', gray: '#F1F5F9', black: '#2A2C32', lime: '#E2FD96', coral: '#F9C9C4' }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect, useRef } = React;
+
+        const Icon = ({ name, size = 18, className = "" }) => {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (window.lucide && iconRef.current) {
+                    const iconName = name.replace(/-./g, x => x[1].toUpperCase()).charAt(0).toUpperCase() + name.replace(/-./g, x => x[1].toUpperCase()).slice(1);
+                    const icon = window.lucide.icons[iconName] || window.lucide.icons[name.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('')];
+                    if (icon) {
+                        const svg = window.lucide.createElement(icon);
+                        svg.setAttribute('width', size);
+                        svg.setAttribute('height', size);
+                        svg.setAttribute('stroke-width', '2');
+                        if (className) className.split(' ').forEach(cls => cls && svg.classList.add(cls));
+                        iconRef.current.innerHTML = '';
+                        iconRef.current.appendChild(svg);
+                    }
+                }
+            }, [name, size, className]);
+            return <span ref={iconRef} className={`inline-flex items-center justify-center ${className}`} style={{ width: size, height: size }}></span>;
+        };
+
+        const INITIAL_INVENTORY = {
+            liquids: [
+                { id: 'l1', name: 'Shampooing Standard', capacity: 1000, price: 30 },
+                { id: 'l2', name: 'Soin Technique', capacity: 500, price: 25 },
+                { id: 'l3', name: 'Produit de Coiffage', capacity: 200, price: 20 }
+            ],
+            disposables: [
+                { id: 'd1', name: 'Gants', packSize: 100, price: 15 },
+                { id: 'd2', name: 'Lingettes', packSize: 50, price: 10 },
+                { id: 'd3', name: 'Désinfectant', packSize: 50, price: 12 }
+            ]
+        };
+
+        const DEFAULT_SERVICE = {
+            name: '',
+            duration: '',
+            selections: []
+        };
+
+       const Modal = ({ isOpen, onClose, onGoToMenu }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] modal-overlay flex justify-center items-start p-4 pt-20">
+            <div className="bg-white rounded-[32px] p-8 max-w-sm w-full shadow-2xl animate-fade-up text-center border border-slate-100">
+                <div className="w-16 h-16 bg-brand-lime rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Icon name="check" size={32} className="text-brand-main" />
+                </div>
+                <h3 className="text-2xl font-black text-brand-black uppercase tracking-tight mb-2">Service Enregistré !</h3>
+                <p className="text-slate-500 text-sm mb-8">Ce service a été calculé et ajouté à votre Carte de Tarifs.</p>
+                <div className="space-y-3">
+                    <button 
+                        onClick={onClose}
+                        className="w-full bg-brand-black text-white py-4 rounded-2xl font-bold uppercase text-xs tracking-widest hover:bg-slate-800 transition-colors"
+                    >
+                        Ajouter d'autres services
+                    </button>
+                    <button 
+                        onClick={onGoToMenu}
+                        className="w-full bg-brand-main text-white py-4 rounded-2xl font-bold uppercase text-xs tracking-widest hover:bg-brand-black transition-colors"
+                    >
+                        Voir ma Carte
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const App = () => {
+       // This tells THIS app to only look at English data
+    const PREFIX = "pricelab_fr_fr_"; 
+
+    const getSaved = (key, fallback) => {
+        const saved = localStorage.getItem(PREFIX + key); 
+        return saved ? JSON.parse(saved) : fallback;
+    };
+
+            const [activeTab, setActiveTab] = useState('goal');
+            
+            const [weeklyHours, setWeeklyHours] = useState(getSaved('weeklyHours', 30));
+            const [targetProfit, setTargetProfit] = useState(getSaved('targetProfit', 45));
+            const [monthlyBills, setMonthlyBills] = useState(getSaved('monthlyBills', [
+                { id: 1, name: 'Loyer / Emplacement', amount: 600 },
+                { id: 2, name: 'Abonnement Booksy', amount: 30 },
+                { id: 3, name: 'Marketing & Assurances', amount: 80 }
+            ]));
+            const [inventory, setInventory] = useState(getSaved('inventory', INITIAL_INVENTORY));
+            const [savedServices, setSavedServices] = useState(getSaved('savedServices', []));
+
+            const [isSavedModalOpen, setIsSavedModalOpen] = useState(false);
+            const [service, setService] = useState({
+                name: 'Service Standard',
+                duration: 45,
+                selections: [
+                    { id: 'l1', amount: 30 },
+                    { id: 'l2', amount: 10 },
+                    { id: 'd1', amount: 1 }
+                ]
+            });
+
+            useEffect(() => {
+                const sendHeight = () => {
+                    const height = document.documentElement.scrollHeight;
+                    window.parent.postMessage({ 'type': 'iframe-resize', 'height': height }, "*");
+                };
+                const observer = new ResizeObserver(() => sendHeight());
+                observer.observe(document.body);
+                sendHeight();
+                return () => observer.disconnect();
+            }, [activeTab, weeklyHours, targetProfit, monthlyBills, inventory, service, savedServices]);
+
+                      // --- AUTO-SAVE TO LOCALSTORAGE ---
+            // Update this useEffect (usually around line 150)
+    useEffect(() => {
+        localStorage.setItem(PREFIX + 'weeklyHours', JSON.stringify(weeklyHours));
+        localStorage.setItem(PREFIX + 'targetProfit', JSON.stringify(targetProfit));
+        localStorage.setItem(PREFIX + 'monthlyBills', JSON.stringify(monthlyBills));
+        localStorage.setItem(PREFIX + 'inventory', JSON.stringify(inventory));
+        localStorage.setItem(PREFIX + 'savedServices', JSON.stringify(savedServices));
+    }, [weeklyHours, targetProfit, monthlyBills, inventory, savedServices]);
+
+            const handleForwardNav = (target) => {
+                setActiveTab(target);
+                window.parent.postMessage({ 'type': 'iframe-scroll-top' }, "*");
+            };
+
+            const totalBills = monthlyBills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+            const monthlyWorkHours = (Number(weeklyHours) || 1) * 4.33;
+            const billCostPerHour = totalBills / (monthlyWorkHours || 1);
+            const totalRequiredPerHour = (Number(targetProfit) || 0) + billCostPerHour;
+
+            const calculateService = (svc) => {
+                let productCost = 0;
+                svc.selections.forEach(sel => {
+                    const liquidItem = inventory.liquids.find(i => i.id === sel.id);
+                    if (liquidItem) {
+                        productCost += (Number(sel.amount) / (Number(liquidItem.capacity) || 1)) * Number(liquidItem.price);
+                    } else {
+                        const disposableItem = inventory.disposables.find(i => i.id === sel.id);
+                        if (disposableItem) {
+                            productCost += (Number(sel.amount) / (Number(disposableItem.packSize) || 1)) * Number(disposableItem.price);
+                        }
+                    }
+                });
+                const laborCost = (Number(svc.duration) / 60) * totalRequiredPerHour;
+                return { total: laborCost + productCost, labor: laborCost, products: productCost };
+            };
+
+            const currentPrice = calculateService(service);
+
+            const handleAddItem = (cat) => {
+                const id = Date.now().toString();
+                const newItem = cat === 'liquids' 
+                    ? { id, name: 'Nouveau Produit Liquide', capacity: 1000, price: 0 } 
+                    : { id, name: 'Nouvel Article Jetable', packSize: 1, price: 0 };
+                setInventory({ ...inventory, [cat]: [...inventory[cat], newItem] });
+            };
+
+            const handleRemoveItem = (cat, id) => {
+                setInventory({ ...inventory, [cat]: inventory[cat].filter(i => i.id !== id) });
+            };
+
+            const toggleSelection = (id) => {
+                const exists = service.selections.find(s => s.id === id);
+                if (exists) {
+                    setService({ ...service, selections: service.selections.filter(s => s.id !== id) });
+                } else {
+                    setService({ ...service, selections: [...service.selections, { id, amount: 1 }] });
+                }
+            };
+
+            const updateSelectionAmount = (id, amount) => {
+                setService({
+                    ...service,
+                    selections: service.selections.map(s => s.id === id ? { ...s, amount: amount === '' ? '' : Number(amount) } : s)
+                });
+            };
+
+            const saveService = () => {
+                setSavedServices([...savedServices, {...service, id: Date.now(), calculated: currentPrice}]);
+                setIsSavedModalOpen(true);
+                window.parent.postMessage({ 'type': 'iframe-scroll-top' }, "*");
+                setService(DEFAULT_SERVICE);
+            };
+
+            const NavItem = ({ id, label, icon }) => (
+                <button 
+                    onClick={() => setActiveTab(id)}
+                    className={`flex-1 min-w-[120px] p-4 rounded-2xl flex flex-col items-center gap-1 transition-all ${activeTab === id ? 'tab-active' : 'bg-white text-slate-400 hover:bg-slate-50 border border-slate-100'}`}
+                >
+                    <div className="flex items-center gap-2">
+                        <Icon name={icon} size={16} />
+                        <span className="font-bold text-xs uppercase">{label}</span>
+                    </div>
+                </button>
+            );
+
+            const NextButton = ({ target, label = "Continuer" }) => (
+                <div className="mt-12 flex justify-end">
+                    <button 
+                        onClick={() => {
+                            handleForwardNav(target);
+                            window.parent.postMessage({ 'type': 'iframe-scroll-top' }, "*");
+                        }} 
+                        className="bg-brand-black text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 hover:bg-brand-main transition-colors shadow-lg group"
+                    >
+                        {label} <Icon name="arrow-right" size={16} className="group-hover:translate-x-1 transition-transform" />
+                    </button>
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen pt-4">
+                    <Modal 
+                        isOpen={isSavedModalOpen} 
+                        onClose={() => setIsSavedModalOpen(false)} 
+                        onGoToMenu={() => { setIsSavedModalOpen(false); handleForwardNav('menu'); }} 
+                    />
+
+                    <nav className="max-w-5xl mx-auto p-4 flex gap-2 overflow-x-auto no-scrollbar">
+                        <NavItem id="goal" label="1. Objectifs" icon="target" />
+                        <NavItem id="inventory" label="2. Réserve" icon="package" />
+                        <NavItem id="builder" label="3. Créateur" icon="calculator" />
+                        <NavItem id="menu" label="4. Ma Carte" icon="clipboard-list" />
+                        <NavItem id="guide" label="Guide" icon="help-circle" />
+                    </nav>
+
+                    <main className="max-w-5xl mx-auto p-4 pb-32">
+                        {activeTab === 'goal' && (
+                            <div className="animate-fade-up">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100">
+                                        <h2 className="text-2xl font-black mb-2 uppercase tracking-tight">Objectifs de Revenus</h2>
+                                        <p className="text-sm text-slate-500 mb-8 font-medium">Définissez votre objectif de bénéfice net par heure.</p>
+                                        <div className="space-y-6">
+                                            <div className="space-y-2">
+                                                <label className="text-[11px] font-bold text-brand-main uppercase tracking-widest">Bénéfice souhaité par heure</label>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-2xl font-bold text-slate-300">€</span>
+                                                    <input type="number" value={targetProfit} onChange={e => setTargetProfit(e.target.value === '' ? '' : Number(e.target.value))} className="editable-input w-full text-xl" />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[11px] font-bold text-brand-main uppercase tracking-widest">Heures travaillées / Semaine</label>
+                                                <input type="number" value={weeklyHours} onChange={e => setWeeklyHours(e.target.value === '' ? '' : Number(e.target.value))} className="editable-input w-full text-xl" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h2 className="text-2xl font-black uppercase tracking-tight">Charges Mensuelles</h2>
+                                            <button onClick={() => setMonthlyBills([...monthlyBills, {id: Date.now(), name: 'Nouvelle Charge', amount: 0}])} className="p-2 bg-brand-main text-white rounded-full hover:bg-brand-black transition-colors"><Icon name="plus" size={16} /></button>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {monthlyBills.map(bill => (
+                                                <div key={bill.id} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
+                                                    <input 
+                                                        value={bill.name} 
+                                                        onChange={e => setMonthlyBills(monthlyBills.map(b => b.id === bill.id ? {...b, name: e.target.value} : b))} 
+                                                        className="editable-input flex-1 min-w-[140px] text-sm" 
+                                                        placeholder="Nom du frais" 
+                                                    />
+                                                    <div className="w-full sm:w-40 min-w-[120px] relative">
+                                                        <span className="absolute left-3 top-2 text-xs text-slate-400">€</span>
+                                                        <input 
+                                                            type="number" 
+                                                            value={bill.amount} 
+                                                            onChange={e => setMonthlyBills(monthlyBills.map(b => b.id === bill.id ? {...b, amount: e.target.value === '' ? '' : Number(e.target.value)} : b))} 
+                                                            className="editable-input w-full pl-7 pr-2 text-sm text-right" 
+                                                        />
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => setMonthlyBills(monthlyBills.filter(b => b.id !== bill.id))}
+                                                        className="text-slate-300 hover:text-red-500 p-2 transition-colors shrink-0"
+                                                    >
+                                                        <Icon name="trash-2" size={16} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center">
+                                            <span className="text-xs font-bold text-slate-400 uppercase">Taux Horaire de Base Calculé :</span>
+                                            <span className="text-xl font-black text-brand-black">{totalRequiredPerHour.toFixed(2)} € /h</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <NextButton target="inventory" label="Étape suivante : Configurer la réserve" />
+                            </div>
+                        )}
+
+                        {activeTab === 'inventory' && (
+                            <div className="animate-fade-up">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="bg-white p-8 rounded-[32px] border border-slate-100">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-2"><Icon name="flask-conical" className="text-brand-main"/> Produits Liquides</h3>
+                                            <button onClick={() => handleAddItem('liquids')} className="text-xs font-bold text-brand-main hover:underline">+ AJOUTER</button>
+                                        </div>
+                                        <div className="space-y-4">
+                                            {inventory.liquids.map(item => (
+                                                <div key={item.id} className="p-4 bg-slate-50 rounded-2xl space-y-3 relative">
+                                                    <div className="flex justify-between items-center gap-2">
+                                                        <input value={item.name} onChange={e => setInventory({...inventory, liquids: inventory.liquids.map(i => i.id === item.id ? {...i, name: e.target.value} : i)})} className="editable-input w-full text-sm font-bold" />
+                                                        <button onClick={() => handleRemoveItem('liquids', item.id)} className="text-slate-300 hover:text-red-500 p-2 transition-colors shrink-0"><Icon name="trash-2" size={16} /></button>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div className="space-y-1">
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase">Volume (ml)</label>
+                                                            <input type="number" value={item.capacity} onChange={e => setInventory({...inventory, liquids: inventory.liquids.map(i => i.id === item.id ? {...i, capacity: e.target.value === '' ? '' : Number(e.target.value)} : i)})} className="editable-input w-full text-xs" />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase">Coût d'achat €</label>
+                                                            <input type="number" value={item.price} onChange={e => setInventory({...inventory, liquids: inventory.liquids.map(i => i.id === item.id ? {...i, price: e.target.value === '' ? '' : Number(e.target.value)} : i)})} className="editable-input w-full text-xs" />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-8 rounded-[32px] border border-slate-100">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-2"><Icon name="layers" className="text-brand-main"/> Produits Jetables</h3>
+                                            <button onClick={() => handleAddItem('disposables')} className="text-xs font-bold text-brand-main hover:underline">+ AJOUTER</button>
+                                        </div>
+                                        <div className="space-y-4">
+                                            {inventory.disposables.map(item => (
+                                                <div key={item.id} className="p-4 bg-slate-50 rounded-2xl space-y-3 relative">
+                                                    <div className="flex justify-between items-center gap-2">
+                                                        <input value={item.name} onChange={e => setInventory({...inventory, disposables: inventory.disposables.map(i => i.id === item.id ? {...i, name: e.target.value} : i)})} className="editable-input w-full text-sm font-bold" />
+                                                        <button onClick={() => handleRemoveItem('disposables', item.id)} className="text-slate-300 hover:text-red-500 p-2 transition-colors shrink-0"><Icon name="trash-2" size={16} /></button>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div className="space-y-1">
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase">Taille du Pack</label>
+                                                            <input type="number" value={item.packSize} onChange={e => setInventory({...inventory, disposables: inventory.disposables.map(i => i.id === item.id ? {...i, packSize: e.target.value === '' ? '' : Number(e.target.value)} : i)})} className="editable-input w-full text-xs" />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase">Coût d'achat €</label>
+                                                            <input type="number" value={item.price} onChange={e => setInventory({...inventory, disposables: inventory.disposables.map(i => i.id === item.id ? {...i, price: e.target.value === '' ? '' : Number(e.target.value)} : i)})} className="editable-input w-full text-xs" />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                                <NextButton target="builder" label="Étape suivante : Créer un service" />
+                            </div>
+                        )}
+
+                        {activeTab === 'builder' && (
+                            <div className="animate-fade-up grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                <div className="lg:col-span-2 space-y-6">
+                                    <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100">
+                                        <h2 className="text-2xl font-black uppercase tracking-tight mb-6">Ingénierie du Service</h2>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-2">
+                                                <label className="text-[11px] font-bold text-brand-main uppercase">Nom du Service</label>
+                                                <input value={service.name} onChange={e => setService({...service, name: e.target.value})} className="editable-input w-full text-lg" placeholder="ex: Coupe Signature" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[11px] font-bold text-brand-main uppercase">Durée (Minutes)</label>
+                                                <input type="number" value={service.duration} onChange={e => setService({...service, duration: e.target.value === '' ? '' : Number(e.target.value)})} className="editable-input w-full text-lg" placeholder="45" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100">
+                                        <h3 className="text-lg font-black uppercase tracking-tight mb-4">Étape A : Sélection</h3>
+                                        <p className="text-xs text-slate-400 mb-6 italic">Choisissez les produits utilisés dans votre Réserve.</p>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-10">
+                                            {[...inventory.liquids, ...inventory.disposables].map(item => {
+                                                const selected = service.selections.some(s => s.id === item.id);
+                                                return (
+                                                    <button 
+                                                        key={item.id}
+                                                        onClick={() => toggleSelection(item.id)}
+                                                        className={`p-4 rounded-2xl border-2 text-left transition-all ${selected ? 'border-brand-main bg-brand-main/5 text-brand-main' : 'border-slate-100 bg-slate-50 text-slate-500'}`}
+                                                    >
+                                                        <p className="text-[11px] font-black uppercase leading-tight">{item.name}</p>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <h3 className="text-lg font-black uppercase tracking-tight mb-4">Étape B : Consommation</h3>
+                                        <div className="space-y-3">
+                                            {service.selections.length === 0 ? (
+                                                <p className="text-sm text-slate-400 italic">Sélectionnez des articles ci-dessus pour définir l'utilisation pour ce service.</p>
+                                            ) : (
+                                                service.selections.map(sel => {
+                                                    const liquidItem = inventory.liquids.find(i => i.id === sel.id);
+                                                    const disposableItem = inventory.disposables.find(i => i.id === sel.id);
+                                                    const item = liquidItem || disposableItem;
+                                                    if (!item) return null;
+                                                    const unit = liquidItem ? 'ml' : 'pcs';
+                                                    return (
+                                                        <div key={sel.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                                            <span className="text-sm font-bold text-brand-black">{item.name}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <input 
+                                                                    type="number" 
+                                                                    value={sel.amount} 
+                                                                    onChange={e => updateSelectionAmount(sel.id, e.target.value)} 
+                                                                    className="editable-input w-24 text-center text-sm" 
+                                                                />
+                                                                <span className="text-[10px] font-black uppercase text-slate-400 min-w-[30px]">{unit}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100">
+                                        <h3 className="text-lg font-black uppercase tracking-tight mb-4">Étape C : Finaliser</h3>
+                                        <p className="text-sm text-slate-500 mb-6">Vérifiez le prix conseillé et enregistrez-le dans votre liste de tarifs.</p>
+                                        <div className="flex items-center gap-6 p-6 bg-brand-gray/50 rounded-3xl border border-slate-100">
+                                            <div className="flex-1">
+                                                <p className="text-[10px] font-black text-brand-main uppercase tracking-widest">Prix de service suggéré</p>
+                                                <p className="text-4xl font-black text-brand-black">{Math.ceil(currentPrice.total)} €</p>
+                                            </div>
+                                            <button 
+                                                onClick={saveService}
+                                                disabled={!service.name || !service.duration}
+                                                className="bg-brand-main hover:bg-brand-black text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl transition-all disabled:opacity-30 flex items-center gap-2"
+                                            >
+                                                <Icon name="plus-circle" size={16} /> Ajouter à la carte
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="mt-8 pt-4 flex justify-between items-center opacity-40 hover:opacity-100 transition-opacity">
+                                        <p className="text-xs font-medium italic">Terminé ? Consultez vos résultats complets.</p>
+                                        <button 
+                                            onClick={() => handleForwardNav('menu')}
+                                            className="text-brand-main font-black uppercase text-xs tracking-widest flex items-center gap-2"
+                                        >
+                                            Aller à ma carte <Icon name="arrow-right" size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="lg:col-span-1">
+                                    <div className="bg-brand-black text-white rounded-[40px] p-8 sticky top-4 shadow-2xl overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-brand-main/20 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+                                        <div className="relative">
+                                            <p className="text-[10px] font-black text-brand-main uppercase tracking-[4px] mb-8">Calcul Direct</p>
+                                            <div className="flex items-start mb-10">
+                                                <span className="text-2xl font-light mt-2 mr-1 text-brand-lime">€</span>
+                                                <span className="text-8xl font-black tracking-tighter">{Math.ceil(currentPrice.total)}</span>
+                                            </div>
+                                            <div className="space-y-4 mb-4">
+                                                <div className="flex justify-between items-center text-xs opacity-60 font-bold uppercase">
+                                                    <span>Temps & Frais Fixes</span>
+                                                    <span>{currentPrice.labor.toFixed(2)} €</span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-xs opacity-60 font-bold uppercase">
+                                                    <span>Coût des Produits</span>
+                                                    <span>{currentPrice.products.toFixed(2)} €</span>
+                                                </div>
+                                                <div className="h-px bg-white/10"></div>
+                                                <div className="flex justify-between items-center text-sm font-black text-brand-lime uppercase">
+                                                    <span>Bénéfice Net Est.</span>
+                                                    <span>{(Math.ceil(currentPrice.total) - (currentPrice.total - currentPrice.labor)).toFixed(2)} €</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'menu' && (
+                            <div className="animate-fade-up max-w-2xl mx-auto">
+                                <div className="text-center mb-12">
+                                    <h2 className="text-4xl font-black text-brand-black uppercase tracking-tighter">Mes Prestations</h2>
+                                    <p className="text-brand-main font-bold mt-2 uppercase tracking-widest text-xs">Prêt pour Booksy</p>
+                                </div>
+                                {savedServices.length === 0 ? (
+                                    <div className="bg-white p-20 rounded-[40px] text-center border-4 border-dashed border-slate-100">
+                                        <Icon name="clipboard-list" size={48} className="mx-auto text-slate-200 mb-4" />
+                                        <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Aucun service créé pour le moment</p>
+                                        <button onClick={() => setActiveTab('builder')} className="mt-4 text-brand-main font-black uppercase text-xs hover:underline">Commencer à créer</button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {savedServices.map(svc => (
+                                            <div key={svc.id} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center justify-between group hover:border-brand-main transition-all">
+                                                <div>
+                                                    <h4 className="font-black text-brand-black uppercase text-lg tracking-tight">{svc.name}</h4>
+                                                    <div className="flex gap-4 mt-1 opacity-50 text-[10px] font-bold uppercase">
+                                                        <span>{svc.duration} min</span>
+                                                        <span>{svc.selections.length} articles</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-6">
+                                                    <div className="text-right">
+                                                        <p className="text-[10px] font-black text-brand-main uppercase tracking-widest mb-1">Prix Cible</p>
+                                                        <p className="text-3xl font-black text-brand-black leading-none">{Math.ceil(svc.calculated.total)} €</p>
+                                                    </div>
+                                                    <button onClick={() => setSavedServices(savedServices.filter(s => s.id !== svc.id))} className="text-slate-200 hover:text-red-400 transition-colors">
+                                                        <Icon name="trash-2" size={20} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'guide' && (
+                            <div className="animate-fade-up max-w-3xl mx-auto bg-white p-10 rounded-[40px] shadow-sm border border-slate-100">
+                                <h2 className="text-3xl font-black text-brand-black mb-8 uppercase tracking-tighter">Comment ça marche</h2>
+                                <div className="space-y-8">
+                                    <div className="flex gap-6">
+                                        <div className="w-10 h-10 rounded-full bg-brand-main text-white flex items-center justify-center font-black shrink-0">1</div>
+                                        <div>
+                                            <h4 className="font-black uppercase text-sm mb-1">Définissez votre valeur</h4>
+                                            <p className="text-slate-500 text-sm">Commencez dans l'onglet <b className="text-brand-black font-bold uppercase text-[12px]">Objectifs</b>. Indiquez au labo combien vous souhaitez gagner par heure de travail effectif et listez vos charges fixes (loyer, logiciels, assurances). Cela crée votre <b className="text-brand-main font-bold">Taux de Base Business</b>.</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-6">
+                                        <div className="w-10 h-10 rounded-full bg-brand-main text-white flex items-center justify-center font-black shrink-0">2</div>
+                                        <div>
+                                            <h4 className="font-black uppercase text-sm mb-1">Gérez la réserve</h4>
+                                            <p className="text-slate-500 text-sm">Listez votre inventaire de produits dans l'onglet <b className="text-brand-black font-bold uppercase text-[12px]">Réserve</b>. Le labo calcule le coût de chaque ml de solution ou de chaque article jetable utilisé.</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-6">
+                                        <div className="w-10 h-10 rounded-full bg-brand-main text-white flex items-center justify-center font-black shrink-0">3</div>
+                                        <div>
+                                            <h4 className="font-black uppercase text-sm mb-1">Concevez vos services</h4>
+                                            <p className="text-slate-500 text-sm">Dans le <b className="text-brand-black font-bold uppercase text-[12px]">Créateur</b>, sélectionnez les articles spécifiques utilisés pour un service. Le labo additionne le temps de travail et le coût des produits pour trouver votre <b className="text-brand-main font-bold">Prix Minimum</b>.</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-6">
+                                        <div className="w-10 h-10 rounded-full bg-brand-main text-white flex items-center justify-center font-black shrink-0">4</div>
+                                        <div>
+                                            <h4 className="font-black uppercase text-sm mb-1">Vérifiez & Enregistrez</h4>
+                                            <p className="text-slate-500 text-sm">Enregistrez vos services dans <b className="text-brand-black font-bold uppercase text-[12px]">Ma Carte</b>. Si vos coûts augmentent plus tard, mettez à jour une seule fois vos Objectifs et tous vos tarifs se recalculeront automatiquement !</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
