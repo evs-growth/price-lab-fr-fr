@@ -11,6 +11,14 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap');
+
+        html, body {
+        margin: 0;
+        padding: 0;
+        height: auto; 
+        background-color: #f8fafc;
+        overflow-x: hidden;
+    }
         body { font-family: 'Poppins', sans-serif; background-color: #f8fafc; color: #2A2C32; }
         .editable-input { 
             background: white; 
@@ -276,23 +284,25 @@ const App = () => {
                 </div>
             );
 
-            return (
-                <div className="min-h-screen pt-4">
-                    <Modal 
-                        isOpen={isSavedModalOpen} 
-                        onClose={() => setIsSavedModalOpen(false)} 
-                        onGoToMenu={() => { setIsSavedModalOpen(false); handleForwardNav('menu'); }} 
-                    />
+return (
+    /* Changed min-h-screen to min-h-0 to prevent iframe "runaway" height */
+    <div className="min-h-0 pt-4 overflow-hidden"> 
+        <Modal 
+            isOpen={isSavedModalOpen} 
+            onClose={() => setIsSavedModalOpen(false)} 
+            onGoToMenu={() => { setIsSavedModalOpen(false); handleForwardNav('menu'); }} 
+        />
 
-                    <nav className="max-w-5xl mx-auto p-4 flex gap-2 overflow-x-auto no-scrollbar">
-                        <NavItem id="goal" label="1. Objectifs" icon="target" />
-                        <NavItem id="inventory" label="2. Réserve" icon="package" />
-                        <NavItem id="builder" label="3. Créateur" icon="calculator" />
-                        <NavItem id="menu" label="4. Ma Carte" icon="clipboard-list" />
-                        <NavItem id="guide" label="Guide" icon="help-circle" />
-                    </nav>
+        <nav className="max-w-5xl mx-auto p-4 flex gap-2 overflow-x-auto no-scrollbar">
+            <NavItem id="goal" label="1. Goals" icon="target" />
+            <NavItem id="inventory" label="2. Stockroom" icon="package" />
+            <NavItem id="builder" label="3. Builder" icon="calculator" />
+            <NavItem id="menu" label="4. Menu" icon="clipboard-list" />
+            <NavItem id="guide" label="Guide" icon="help-circle" />
+        </nav>
 
-                    <main className="max-w-5xl mx-auto p-4 pb-32">
+        {/* Changed pb-32 to pb-10 to reduce the gap at the bottom */}
+        <main className="max-w-5xl mx-auto p-4 pb-10">
                         {activeTab === 'goal' && (
                             <div className="animate-fade-up">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
